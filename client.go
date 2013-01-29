@@ -27,13 +27,40 @@ func main() {
 	}
 	defer conn.Close()
 
-	/* for i := 0; i < 1; i++ { */
-		msgs := sineWaveOnMfader(4, 2, 1, 24, 0)
-		b := osc.NewBundle(time.Now(), msgs...)
-		b.WriteTo(conn)
+	bc := make(chan *osc.Bundle)
 
-		msleep(500)
-	/* } */
+	go func() {
+		var i int
+		for {
+			i %= 24
+			msgs := sineWaveOnMfader(4, 1, 1, 24, i)
+			b := osc.NewBundle(time.Now(), msgs...)
+			/* b.WriteTo(conn) */
+
+			msleep(50)
+			bc <- b
+			i += 1
+		}
+	}()
+
+	go func() {
+		var i int
+		for {
+			i %= 24
+			msgs := sineWaveOnMfader(4, 2, 1, 24, i)
+			b := osc.NewBundle(time.Now(), msgs...)
+			/* b.WriteTo(conn) */
+
+			msleep(30)
+			bc <- b
+			i += 1
+		}
+	}()
+
+	for {
+		b := <-bc
+		b.WriteTo(conn)
+	}
 
 	// var input string
 	// for {
@@ -53,7 +80,8 @@ func sineWaveOnMfader(panNo, mfaderNo int, sIdx, cnt int, offset int) []*osc.Mes
 	for i := sIdx - 1; i < cnt; i++ {
 		m := new(osc.Message)
 		m.Address = fmt.Sprintf("/%d/multifader%d/%d", panNo, mfaderNo, i+1)
-		m.AppendArgs(float32(math.Sin((float64(i)*math.Pi*2)/float64(cnt))))
+		sinV := float32(math.Sin((float64(i+offset) * math.Pi * 2) / float64(cnt)))
+		m.AppendArgs((sinV + 1) / 2)
 		msgs[i] = m
 	}
 
