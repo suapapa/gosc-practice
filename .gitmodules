@@ -1,0 +1,3 @@
+[submodule "gosc"]
+	path = gosc
+	url = https://github.com/suapapa/gosc.git
