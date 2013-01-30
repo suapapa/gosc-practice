@@ -4,61 +4,65 @@ import (
 	"./gosc"
 	"fmt"
 	"math"
+	"math/rand"
 	"net"
 	"os"
 	"time"
 )
 
-func main() {
-	// go runOSCServer()
-
-	/* laddr, resolverr := net.ResolveUDPAddr("udp", "192.168.200.21:9000") */
-	fmt.Println(os.Args[1])
-	laddr, resolverr := net.ResolveUDPAddr("udp", os.Args[1])
+func connectToOSCServer(addr string) (net.Conn, error) {
+	laddr, resolverr := net.ResolveUDPAddr("udp", addr)
 	if resolverr != nil {
-		fmt.Println("ResolveUDPAddr:", resolverr)
-		return
+		return nil, resolverr
 	}
 
 	conn, dialerr := net.DialUDP("udp", nil, laddr)
 	if dialerr != nil {
-		fmt.Println("DialUDP:", dialerr)
-		return
+		return nil, dialerr
+	}
+
+	return conn, nil
+}
+
+func runFader(oscc chan *osc.Bundle, faderId int, sleepMs time.Duration) {
+	colors := []string{"red", "green", "blue", "yellow", "pupple", "gray", "orange", "brown", "pink"}
+
+	var i int
+	for {
+		i %= 24
+		msgs := sineWaveOnMfader(4, faderId, 1, 24, i)
+		if i == 0 {
+			colorM := osc.NewMessage("/4/multifader1/12/color",
+				colors[rand.Intn(len(colors))])
+			msgs = append(msgs, colorM)
+		}
+
+		b := osc.NewBundle(time.Now(), msgs...)
+
+		msleep(sleepMs)
+		oscc <- b
+		i += 1
+
+	}
+}
+
+func main() {
+	go runOSCServer()
+
+	conn, err := connectToOSCServer(os.Args[1])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	defer conn.Close()
 
-	bc := make(chan *osc.Bundle)
+	time.Sleep(100)
 
-	go func() {
-		var i int
-		for {
-			i %= 24
-			msgs := sineWaveOnMfader(4, 1, 1, 24, i)
-			b := osc.NewBundle(time.Now(), msgs...)
-			/* b.WriteTo(conn) */
-
-			msleep(50)
-			bc <- b
-			i += 1
-		}
-	}()
-
-	go func() {
-		var i int
-		for {
-			i %= 24
-			msgs := sineWaveOnMfader(4, 2, 1, 24, i)
-			b := osc.NewBundle(time.Now(), msgs...)
-			/* b.WriteTo(conn) */
-
-			msleep(30)
-			bc <- b
-			i += 1
-		}
-	}()
-
+	oscc := make(chan *osc.Bundle)
+	go runFader(oscc, 1, 50)
+	/* go runFader(oscc, 2, 30) */
 	for {
-		b := <-bc
+		b := <-oscc
 		b.WriteTo(conn)
 	}
 
